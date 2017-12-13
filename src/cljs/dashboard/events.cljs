@@ -3,7 +3,7 @@
   (:require
    [cljs.core.async :as async :refer (<! >! put! chan timeout)]
    [dashboard.ws :refer [handle-event]]
-   [dashboard.db :refer [default-db]]
+   [dashboard.db :refer [default-db token->local-store]]
    [dashboard.routes :refer [nav!]]
    [taoensso.timbre :as timbre :refer-macros (tracef debugf infof warnf errorf)]
    [taoensso.sente  :as sente :refer (cb-success?)]
@@ -42,6 +42,11 @@
              [:http-xhrio :headers]
              {"Authorization" (str "Token " token)})))
 
+(def ->local-store (after token->local-store))
+
+(def user-interceptor [(path :token)
+                       ->local-store])
+
 (reg-event-fx
  :set-page
  []
@@ -67,6 +72,7 @@
 
 (reg-event-fx
  :s-login
+ user-interceptor
  (fn [{:keys [db]} [_ {:keys [auth-token]}]]
    (infof "Successfully logged in.")
    (nav! "/admin")
@@ -123,9 +129,11 @@
 
 (reg-event-fx
  :initialise-db
- []
- (fn [{:keys [db]} _]
-   {:db (assoc default-db :state {})}))
+ [(inject-cofx :local-store-token)]
+ (fn [{:keys [db local-store-token]} _]
+   {:db (-> default-db
+            (assoc :state {})
+            (assoc :token local-store-token))}))
 
 (reg-event-fx
   :fetch-dashboards
